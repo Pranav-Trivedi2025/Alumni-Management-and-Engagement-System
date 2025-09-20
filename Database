@@ -1,0 +1,73 @@
+CREATE DATABASE alumni_network_db;
+
+USE alumni_network_db;
+
+CREATE TABLE users (
+    user_id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    role ENUM('alumni', 'student', 'admin') NOT NULL,
+    batch_year YEAR,
+    current_job VARCHAR(100),
+    company VARCHAR(100),
+    location VARCHAR(100),
+    profile_picture VARCHAR(255),
+    bio TEXT,
+    skills TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+-- Events Table
+CREATE TABLE events (
+    event_id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    description TEXT,
+    date DATE NOT NULL,
+    time TIME,
+    location VARCHAR(200),
+    created_by INT NOT NULL,
+    event_type ENUM('webinar', 'reunion', 'networking', 'workshop') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Mentorship Table
+CREATE TABLE mentorship (
+    mentorship_id INT AUTO_INCREMENT PRIMARY KEY,
+    mentor_id INT NOT NULL,
+    mentee_id INT NOT NULL,
+    status ENUM('requested', 'approved', 'completed', 'cancelled') DEFAULT 'requested',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (mentor_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    FOREIGN KEY (mentee_id) REFERENCES users(user_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_mentorship (mentor_id, mentee_id)
+);
+
+-- Posts/Activity Feed Table
+CREATE TABLE posts (
+    post_id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    content TEXT NOT NULL,
+    post_type ENUM('event', 'job', 'update', 'achievement', 'announcement') NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+);
+
+-- Indexes for better performance
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_batch_year ON users(batch_year);
+CREATE INDEX idx_events_date ON events(date);
+CREATE INDEX idx_events_created_by ON events(created_by);
+CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_mentorship_mentor ON mentorship(mentor_id);
+CREATE INDEX idx_mentorship_mentee ON mentorship(mentee_id);
+CREATE INDEX idx_mentorship_status ON mentorship(status);
+CREATE INDEX idx_posts_user ON posts(user_id);
+CREATE INDEX idx_posts_type ON posts(post_type);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
