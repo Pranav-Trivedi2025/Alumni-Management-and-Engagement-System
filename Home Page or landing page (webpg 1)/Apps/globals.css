@@ -1,0 +1,126 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Updated color scheme for AlumniConnect - navy, gold, light gray theme */
+  --background: #f7f9fc; /* Light gray for overall background */
+  --foreground: #001f3f; /* Navy for primary text */
+  --card: #ffffff; /* White for card backgrounds */
+  --card-foreground: #001f3f; /* Navy for card text */
+  --popover: #ffffff; /* White for popover elements */
+  --popover-foreground: #001f3f; /* Navy for popover text */
+  --primary: #001f3f; /* Navy for primary actions */
+  --primary-foreground: #ffffff; /* White text on primary buttons */
+  --secondary: #ffcc00; /* Gold for secondary actions */
+  --secondary-foreground: #001f3f; /* Navy text on secondary buttons */
+  --muted: #f7f9fc; /* Light gray for muted backgrounds */
+  --muted-foreground: #374151; /* Dark gray for muted text */
+  --accent: #ffcc00; /* Gold for accents */
+  --accent-foreground: #001f3f; /* Navy for accent text */
+  --destructive: #dc2626; /* Red for errors */
+  --destructive-foreground: #ffffff; /* White text on errors */
+  --border: #e0e0e0; /* Light gray for borders */
+  --input: #ffffff; /* White for input backgrounds */
+  --ring: #ffcc00; /* Gold for focus rings */
+  --chart-1: #001f3f; /* Navy for chart colors */
+  --chart-2: #ffcc00; /* Gold for chart colors */
+  --chart-3: #f7f9fc; /* Light gray for chart colors */
+  --chart-4: #374151; /* Dark gray for chart colors */
+  --chart-5: #dc2626; /* Red for chart colors */
+  --radius: 0.5rem; /* Rounded corners */
+  --sidebar: #ffffff; /* White for sidebar */
+  --sidebar-foreground: #001f3f; /* Navy for sidebar text */
+  --sidebar-primary: #001f3f; /* Navy for primary sidebar elements */
+  --sidebar-primary-foreground: #ffffff; /* White text on sidebar elements */
+  --sidebar-accent: #ffcc00; /* Gold for sidebar accents */
+  --sidebar-accent-foreground: #001f3f; /* Navy text on sidebar accents */
+  --sidebar-border: #e0e0e0; /* Light gray for sidebar borders */
+  --sidebar-ring: #ffcc00; /* Gold for sidebar focus rings */
+}
+
+.dark {
+  --background: #001f3f;
+  --foreground: #ffffff;
+  --card: #1a365d;
+  --card-foreground: #ffffff;
+  --popover: #1a365d;
+  --popover-foreground: #ffffff;
+  --primary: #ffffff;
+  --primary-foreground: #001f3f;
+  --secondary: #ffcc00;
+  --secondary-foreground: #001f3f;
+  --muted: #1a365d;
+  --muted-foreground: #a0aec0;
+  --accent: #ffcc00;
+  --accent-foreground: #001f3f;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #2d3748;
+  --input: #1a365d;
+  --ring: #ffcc00;
+  --chart-1: #ffffff;
+  --chart-2: #ffcc00;
+  --chart-3: #a0aec0;
+  --chart-4: #718096;
+  --chart-5: #dc2626;
+  --sidebar: #1a365d;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #001f3f;
+  --sidebar-accent: #ffcc00;
+  --sidebar-accent-foreground: #001f3f;
+  --sidebar-border: #2d3748;
+  --sidebar-ring: #ffcc00;
+}
+
+@theme inline {
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
