@@ -56,7 +56,7 @@ Technical Stack
 
 Frontend: React.js / Tailwind CSS 
 
-Backend:MySQL
+Backend:Node.js
 
 Database: MySQL / Firebase (modular: Profiles, Events, Mentorship, Donations)
 
