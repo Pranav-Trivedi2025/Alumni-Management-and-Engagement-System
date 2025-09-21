@@ -71,3 +71,24 @@ CREATE INDEX idx_mentorship_status ON mentorship(status);
 CREATE INDEX idx_posts_user ON posts(user_id);
 CREATE INDEX idx_posts_type ON posts(post_type);
 CREATE INDEX idx_posts_created_at ON posts(created_at);
+
+
+--Mentorship topics/skills
+CREATE TABLE mentorship_topics (
+    topic_id INT AUTO_INCREMENT PRIMARY KEY,
+    mentorship_id INT NOT NULL,
+    topic_name VARCHAR(100),
+    FOREIGN KEY (mentorship_id) REFERENCES mentorship(mentorship_id)
+);
+
+--mentorship feedback
+CREATE TABLE mentorship_feedback (
+    feedback_id INT AUTO_INCREMENT PRIMARY KEY,
+    mentorship_id INT NOT NULL,
+    given_by INT NOT NULL,   -- mentee_id
+    rating INT CHECK (rating BETWEEN 1 AND 5),
+    comments TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (mentorship_id) REFERENCES mentorship(mentorship_id),
+    FOREIGN KEY (given_by) REFERENCES users(user_id)
+);
