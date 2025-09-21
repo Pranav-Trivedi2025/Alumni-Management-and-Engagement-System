@@ -58,21 +58,6 @@ CREATE TABLE posts (
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
 );
 
--- Indexes for better performance
-CREATE INDEX idx_users_email ON users(email);
-CREATE INDEX idx_users_role ON users(role);
-CREATE INDEX idx_users_batch_year ON users(batch_year);
-CREATE INDEX idx_events_date ON events(date);
-CREATE INDEX idx_events_created_by ON events(created_by);
-CREATE INDEX idx_events_type ON events(event_type);
-CREATE INDEX idx_mentorship_mentor ON mentorship(mentor_id);
-CREATE INDEX idx_mentorship_mentee ON mentorship(mentee_id);
-CREATE INDEX idx_mentorship_status ON mentorship(status);
-CREATE INDEX idx_posts_user ON posts(user_id);
-CREATE INDEX idx_posts_type ON posts(post_type);
-CREATE INDEX idx_posts_created_at ON posts(created_at);
-
-
 --Mentorship topics/skills
 CREATE TABLE mentorship_topics (
     topic_id INT AUTO_INCREMENT PRIMARY KEY,
@@ -93,36 +78,43 @@ CREATE TABLE mentorship_feedback (
     FOREIGN KEY (given_by) REFERENCES users(user_id)
 );
 
+
+-- Indexes for better performance
+CREATE INDEX idx_users_email ON users(email);
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_users_batch_year ON users(batch_year);
+CREATE INDEX idx_events_date ON events(date);
+CREATE INDEX idx_events_created_by ON events(created_by);
+CREATE INDEX idx_events_type ON events(event_type);
+CREATE INDEX idx_mentorship_mentor ON mentorship(mentor_id);
+CREATE INDEX idx_mentorship_mentee ON mentorship(mentee_id);
+CREATE INDEX idx_mentorship_status ON mentorship(status);
+CREATE INDEX idx_posts_user ON posts(user_id);
+CREATE INDEX idx_posts_type ON posts(post_type);
+CREATE INDEX idx_posts_created_at ON posts(created_at);
+CREATE INDEX idx_mentorship_topics_mentorship_id ON mentorship_topics(mentorship_id);
+CREATE INDEX idx_mentorship_feedback_mentorship_id ON mentorship_feedback(mentorship_id);
+CREATE INDEX idx_mentorship_feedback_given_by ON mentorship_feedback(given_by);
+CREATE INDEX idx_mentorship_feedback_rating ON mentorship_feedback(rating);
+
 -- Insert Users (Alumni, Students, Admin)
 INSERT INTO users (name, email, password_hash, role, batch_year, current_job, company, location, profile_picture, bio, skills) VALUES
 ('John Smith', 'john.smith@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'alumni', 2018, 'Software Engineer', 'Google', 'San Francisco, CA', 'john_profile.jpg', 'Passionate software engineer with 5 years of experience in full-stack development.', 'JavaScript, Python, React, Node.js, AWS'),
-
 ('Sarah Johnson', 'sarah.johnson@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'alumni', 2017, 'Product Manager', 'Microsoft', 'Seattle, WA', 'sarah_profile.jpg', 'Product manager focused on AI and machine learning solutions.', 'Product Management, AI/ML, Data Analysis, Agile'),
-
 ('Mike Chen', 'mike.chen@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'alumni', 2019, 'Data Scientist', 'Netflix', 'Los Angeles, CA', 'mike_profile.jpg', 'Data scientist specializing in recommendation systems and user behavior analysis.', 'Python, R, Machine Learning, SQL, Tableau'),
-
 ('Emily Davis', 'emily.davis@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student', 2024, NULL, NULL, 'Boston, MA', 'emily_profile.jpg', 'Final year computer science student interested in web development.', 'HTML, CSS, JavaScript, Python, Git'),
-
 ('Alex Rodriguez', 'alex.rodriguez@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'student', 2025, NULL, NULL, 'Austin, TX', 'alex_profile.jpg', 'Third year student passionate about mobile app development.', 'Java, Kotlin, Swift, Android Development, iOS Development'),
-
 ('Admin User', 'admin@university.edu', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'admin', NULL, 'System Administrator', 'University', 'Campus', 'admin_profile.jpg', 'Managing the alumni network platform.', 'System Administration, Database Management'),
-
 ('Lisa Wang', 'lisa.wang@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'alumni', 2016, 'UX Designer', 'Adobe', 'San Jose, CA', 'lisa_profile.jpg', 'Creative UX designer with expertise in user research and design thinking.', 'UX/UI Design, Figma, User Research, Prototyping'),
-
 ('David Brown', 'david.brown@email.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'alumni', 2020, 'Startup Founder', 'TechStart Inc.', 'New York, NY', 'david_profile.jpg', 'Entrepreneur and startup founder in the fintech space.', 'Entrepreneurship, Fintech, Leadership, Business Development');
 
 -- Insert Events
 INSERT INTO events (title, description, date, time, location, created_by, event_type) VALUES
 ('Annual Alumni Reunion 2025', 'Join us for our biggest alumni gathering of the year! Reconnect with old friends and make new connections.', '2025-10-15', '18:00:00', 'University Main Auditorium', 6, 'reunion'),
-
 ('Career Development Webinar', 'Learn about the latest trends in tech careers and how to advance your professional journey.', '2025-09-28', '14:00:00', 'Online - Zoom Link', 1, 'webinar'),
-
 ('Startup Pitch Night', 'Alumni entrepreneurs present their startups to fellow graduates and potential investors.', '2025-11-05', '19:00:00', 'Innovation Center Hall B', 8, 'networking'),
-
 ('Machine Learning Workshop', 'Hands-on workshop covering practical ML applications in industry.', '2025-10-12', '10:00:00', 'Computer Science Building Room 201', 3, 'workshop'),
-
 ('Alumni Networking Mixer', 'Casual networking event for alumni in the San Francisco Bay Area.', '2025-09-30', '18:30:00', 'SF Tech Hub, Downtown', 1, 'networking'),
-
 ('UX Design Masterclass', 'Advanced UX design techniques and industry best practices.', '2025-11-20', '13:00:00', 'Design Studio, Campus', 7, 'workshop');
 
 -- Insert Mentorship Records
@@ -138,25 +130,63 @@ INSERT INTO mentorship (mentor_id, mentee_id, status) VALUES
 -- Insert Posts/Activity Feed
 INSERT INTO posts (user_id, content, post_type) VALUES
 (1, 'Excited to announce that I just got promoted to Senior Software Engineer at Google! Grateful for all the support from my alma mater.', 'update'),
-
 (2, 'Just posted a new job opening for Product Manager at Microsoft. Check out our careers page if you''re interested in AI/ML products!', 'job'),
-
 (6, 'Reminder: Annual Alumni Reunion registration is now open! Early bird pricing ends next week.', 'event'),
-
 (3, 'Had an amazing time presenting at the Data Science Conference. The future of recommendation systems looks bright!', 'achievement'),
-
 (8, 'Our startup just closed Series A funding! Looking to hire talented engineers. DM me if you''re interested.', 'job'),
-
 (7, 'Excited to be conducting a UX Design Masterclass next month. Limited spots available, register soon!', 'event'),
-
 (4, 'Looking for internship opportunities in web development. Would appreciate any leads or advice!', 'update'),
-
 (5, 'Just finished my mobile app project - a campus food delivery app. Thanks to my mentors for the guidance!', 'achievement'),
-
 (1, 'Hosting a career development webinar next week. Will share insights about breaking into big tech companies.', 'event'),
-
 (2, 'Proud to see so many of our alumni making waves in the tech industry. The network keeps growing stronger!', 'announcement'),
-
 (3, 'New blog post: "10 Essential Python Libraries for Data Science" - check it out on my LinkedIn profile.', 'update'),
-
 (8, 'Speaking at the Startup Pitch Night event. Come see what we''re building in the fintech space!', 'event');
+
+
+INSERT INTO mentorship_topics (mentorship_id, topic_name) VALUES
+-- Topics for mentorship_id 1 (John Smith mentoring Emily Davis)
+(1, 'Full-Stack Development'),
+(1, 'System Design'),
+(1, 'Interview Preparation'),
+(1, 'Career Growth at Big Tech'),
+-- Topics for mentorship_id 2 (Sarah Johnson mentoring Alex Rodriguez)
+(2, 'Product Management Fundamentals'),
+(2, 'Mobile App Strategy'),
+(2, 'Agile Methodologies'),
+(2, 'User Research'),
+-- Topics for mentorship_id 3 (Mike Chen requested by Emily Davis) 
+(3, 'Data Science Career Path'),
+(3, 'Machine Learning Applications'),
+(3, 'Python for Data Analysis'),
+-- Topics for mentorship_id 4 (Lisa Wang mentoring Alex Rodriguez)
+(4, 'UX/UI Design Principles'),
+(4, 'Mobile App Design'),
+(4, 'Design Portfolio Building'),
+(4, 'User Experience Research'),
+-- Topics for mentorship_id 5 (David Brown requested by Emily Davis)
+(5, 'Entrepreneurship'),
+(5, 'Startup Fundamentals'),
+(5, 'Business Development'),
+-- Topics for mentorship_id 6 (John Smith completed with Alex Rodriguez)
+(6, 'Software Engineering Best Practices'),
+(6, 'Code Review Process'),
+(6, 'Technical Leadership'),
+-- Topics for mentorship_id 7 (Sarah Johnson requested by Emily Davis)
+(7, 'Product Strategy'),
+(7, 'Technical Product Management'),
+(7, 'Cross-functional Team Leadership');
+
+INSERT INTO mentorship_feedback (mentorship_id, given_by, rating, comments, created_at) VALUES
+-- Feedback for mentorship_id 1 (John Smith mentoring Emily Davis - approved)
+(1, 4, 5, 'John has been an incredible mentor! His guidance on full-stack development and system design has been invaluable. He always makes time for my questions and provides practical, real-world examples from his experience at Google. Highly recommend him as a mentor.', '2025-09-15 10:30:00'),
+-- Feedback for mentorship_id 2 (Sarah Johnson mentoring Alex Rodriguez - approved)
+(2, 5, 4, 'Sarah is very knowledgeable about product management and has helped me understand the mobile app development lifecycle from a business perspective. Her insights into agile methodologies have improved my project management skills significantly. Sometimes our schedules conflict, but overall a great experience.', '2025-09-18 14:20:00'),
+-- Feedback for mentorship_id 4 (Lisa Wang mentoring Alex Rodriguez - approved)
+(4, 5, 5, 'Lisa is an amazing UX mentor! She helped me completely redesign my mobile app with better user experience principles. Her feedback on my portfolio was spot-on and helped me land an internship interview. She goes above and beyond to ensure I understand design thinking concepts.', '2025-09-10 16:45:00'),
+-- Feedback for mentorship_id 6 (John Smith completed with Alex Rodriguez - completed)
+(6, 5, 5, 'John was my first mentor and set the bar high! During our 6-month mentorship, he taught me software engineering best practices that I still use today. His code review sessions were incredibly detailed and helped me become a much better developer. The technical leadership advice was also very valuable for my current projects.', '2025-08-22 11:15:00'),
+-- Additional feedback for ongoing mentorships
+-- Another feedback for mentorship_id 1 (mid-mentorship check-in)
+(1, 4, 5, 'Quick update: John continues to be an excellent mentor. We''ve started working on interview preparation and his mock interview sessions are really helping build my confidence. Looking forward to applying to internships next semester!', '2025-09-20 09:00:00'),
+-- Feedback for mentorship_id 2 (progress update)
+(2, 5, 4, 'Three months into the mentorship with Sarah and learning a lot about product strategy. She introduced me to user research techniques that I''m now applying to my capstone project. Her connections in the industry have also been helpful for networking.', '2025-09-12 13:30:00');
