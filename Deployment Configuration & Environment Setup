@@ -1,0 +1,415 @@
+# Alumni Management System Deployment Guide
+
+# ==================== PACKAGE.JSON ====================
+# Create package.json file:
+cat > package.json << 'EOF'
+{
+  "name": "alumni-management-api",
+  "version": "1.0.0",
+  "description": "Alumni Management System API",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "db:migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.0",
+    "pg": "^8.11.0",
+    "cors": "^2.8.5",
+    "helmet": "^6.1.5",
+    "express-rate-limit": "^6.7.0",
+    "dotenv": "^16.0.3"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
+EOF
+
+# ==================== ENVIRONMENT VARIABLES ====================
+# Create .env file:
+cat > .env << 'EOF'
+# Database Configuration
+DATABASE_URL=postgresql://username:password@localhost:5432/alumni_db
+
+# JWT Configuration
+JWT_SECRET=your-super-secret-jwt-key-here-make-it-long-and-complex
+
+# Server Configuration
+PORT=5000
+NODE_ENV=development
+
+# Frontend Configuration
+FRONTEND_URL=http://localhost:3000
+
+# Email Configuration (for notifications)
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-app-password
+EOF
+
+# ==================== VERCEL CONFIGURATION ====================
+# Create vercel.json for deployment:
+cat > vercel.json << 'EOF'
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "server.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
+EOF
+
+# ==================== DATABASE MIGRATION SCRIPT ====================
+# Create scripts/migrate.js:
+mkdir -p scripts
+cat > scripts/migrate.js << 'EOF'
+const { Pool } = require('pg');
+require('dotenv').config();
+
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
+
+async function runMigration() {
+    try {
+        console.log('Starting database migration...');
+        
+        // Read and execute the SQL schema
+        const fs = require('fs');
+        const path = require('path');
+        const schema = fs.readFileSync(path.join(__dirname, '../schema.sql'), 'utf8');
+        
+        await pool.query(schema);
+        console.log('Database migration completed successfully!');
+        
+        // Create default admin user
+        const bcrypt = require('bcryptjs');
+        const hashedPassword = await bcrypt.hash('admin123', 12);
+        
+        await pool.query(`
+            INSERT INTO users (email, password_hash, role) 
+            VALUES ('admin@alumni.edu', $1, 'admin') 
+            ON CONFLICT (email) DO NOTHING
+        `, [hashedPassword]);
+        
+        console.log('Default admin user created (if not exists)');
+        console.log('Email: admin@alumni.edu');
+        console.log('Password: admin123');
+        console.log('Please change the default password after first login!');
+        
+    } catch (error) {
+        console.error('Migration failed:', error);
+    } finally {
+        await pool.end();
+    }
+}
+
+runMigration();
+EOF
+
+# ==================== DEPLOYMENT INSTRUCTIONS ====================
+
+echo "==================== DEPLOYMENT INSTRUCTIONS ===================="
+echo ""
+echo "1. DATABASE SETUP:"
+echo "   - Create a PostgreSQL database (recommended: Supabase, Neon, or Railway)"
+echo "   - Update DATABASE_URL in .env file"
+echo "   - Run: npm run db:migrate"
+echo ""
+echo "2. LOCAL DEVELOPMENT:"
+echo "   - npm install"
+echo "   - npm run dev"
+echo "   - API will be available at http://localhost:5000"
+echo ""
+echo "3. VERCEL DEPLOYMENT:"
+echo "   - Install Vercel CLI: npm i -g vercel"
+echo "   - Run: vercel"
+echo "   - Add environment variables in Vercel dashboard"
+echo "   - Deploy: vercel --prod"
+echo ""
+echo "4. ENVIRONMENT VARIABLES FOR VERCEL:"
+echo "   - DATABASE_URL (your PostgreSQL connection string)"
+echo "   - JWT_SECRET (generate a strong secret)"
+echo "   - FRONTEND_URL (your V0 app URL)"
+echo ""
+echo "==================== API ENDPOINTS SUMMARY ===================="
+echo ""
+echo "Authentication:"
+echo "POST /api/auth/register - Register new user"
+echo "POST /api/auth/login - User login"
+echo ""
+echo "Profile Management:"
+echo "GET /api/profile - Get user profile"
+echo "POST /api/profile - Create/update profile"
+echo ""
+echo "Events:"
+echo "GET /api/events - Get all events"
+echo "POST /api/events/:id/register - Register for event"
+echo "DELETE /api/events/:id/register - Unregister from event"
+echo ""
+echo "Mentorship:"
+echo "GET /api/mentors - Get available mentors"
+echo "POST /api/mentorship/request - Request mentorship"
+echo ""
+echo "Donations:"
+echo "GET /api/donations - Get user donations"
+echo "POST /api/donations - Make donation"
+echo ""
+echo "Dashboard:"
+echo "GET /api/dashboard - Get dashboard data"
+echo "GET /api/notifications - Get notifications"
+echo "GET /api/badges - Get user badges"
+echo "GET /api/leaderboard - Get leaderboard"
+echo ""
+
+# ==================== FRONTEND INTEGRATION EXAMPLES ====================
+
+cat > frontend-integration.js << 'EOF'
+// Frontend integration examples for your V0 website
+
+// API Base URL (update with your deployed API URL)
+const API_BASE_URL = 'https://your-api.vercel.app/api';
+
+// Authentication helper
+class AlumniAPI {
+    constructor() {
+        this.baseURL = API_BASE_URL;
+        this.token = localStorage.getItem('alumni_token');
+    }
+
+    // Set authentication header
+    getHeaders() {
+        return {
+            'Content-Type': 'application/json',
+            ...(this.token && { 'Authorization': `Bearer ${this.token}` })
+        };
+    }
+
+    // Login function
+    async login(email, password) {
+        try {
+            const response = await fetch(`${this.baseURL}/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            const data = await response.json();
+            
+            if (response.ok) {
+                this.token = data.token;
+                localStorage.setItem('alumni_token', data.token);
+                localStorage.setItem('alumni_user', JSON.stringify(data.user));
+                return { success: true, data };
+            } else {
+                return { success: false, error: data.error };
+            }
+        } catch (error) {
+            return { success: false, error: 'Network error' };
+        }
+    }
+
+    // Get dashboard data
+    async getDashboard() {
+        try {
+            const response = await fetch(`${this.baseURL}/dashboard`, {
+                headers: this.getHeaders()
+            });
+            
+            if (response.ok) {
+                return await response.json();
+            } else {
+                throw new Error('Failed to fetch dashboard');
+            }
+        } catch (error) {
+            console.error('Dashboard fetch error:', error);
+            return null;
+        }
+    }
+
+    // Get events
+    async getEvents(upcoming = false) {
+        try {
+            const url = `${this.baseURL}/events${upcoming ? '?upcoming=true' : ''}`;
+            const response = await fetch(url, {
+                headers: this.getHeaders()
+            });
+            
+            return response.ok ? await response.json() : [];
+        } catch (error) {
+            console.error('Events fetch error:', error);
+            return [];
+        }
+    }
+
+    // Register for event
+    async registerForEvent(eventId) {
+        try {
+            const response = await fetch(`${this.baseURL}/events/${eventId}/register`, {
+                method: 'POST',
+                headers: this.getHeaders()
+            });
+            
+            return response.ok;
+        } catch (error) {
+            console.error('Event registration error:', error);
+            return false;
+        }
+    }
+
+    // Update profile
+    async updateProfile(profileData) {
+        try {
+            const response = await fetch(`${this.baseURL}/profile`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify(profileData)
+            });
+            
+            return response.ok ? await response.json() : null;
+        } catch (error) {
+            console.error('Profile update error:', error);
+            return null;
+        }
+    }
+
+    // Get mentors
+    async getMentors(filters = {}) {
+        try {
+            const params = new URLSearchParams(filters);
+            const response = await fetch(`${this.baseURL}/mentors?${params}`, {
+                headers: this.getHeaders()
+            });
+            
+            return response.ok ? await response.json() : [];
+        } catch (error) {
+            console.error('Mentors fetch error:', error);
+            return [];
+        }
+    }
+
+    // Make donation
+    async makeDonation(donationData) {
+        try {
+            const response = await fetch(`${this.baseURL}/donations`, {
+                method: 'POST',
+                headers: this.getHeaders(),
+                body: JSON.stringify(donationData)
+            });
+            
+            return response.ok ? await response.json() : null;
+        } catch (error) {
+            console.error('Donation error:', error);
+            return null;
+        }
+    }
+
+    // Logout
+    logout() {
+        this.token = null;
+        localStorage.removeItem('alumni_token');
+        localStorage.removeItem('alumni_user');
+    }
+
+    // Check if user is authenticated
+    isAuthenticated() {
+        return !!this.token;
+    }
+
+    // Get current user
+    getCurrentUser() {
+        const user = localStorage.getItem('alumni_user');
+        return user ? JSON.parse(user) : null;
+    }
+}
+
+// Usage example for V0 components:
+/*
+// Initialize API client
+const api = new AlumniAPI();
+
+// Login form submission
+const handleLogin = async (formData) => {
+    const result = await api.login(formData.email, formData.password);
+    
+    if (result.success) {
+        // Redirect to dashboard
+        window.location.href = '/dashboard';
+    } else {
+        // Show error message
+        alert(result.error);
+    }
+};
+
+// Dashboard data loading
+const loadDashboard = async () => {
+    if (!api.isAuthenticated()) {
+        window.location.href = '/login';
+        return;
+    }
+    
+    const dashboardData = await api.getDashboard();
+    if (dashboardData) {
+        // Update UI with dashboard data
+        updateDashboardUI(dashboardData);
+    }
+};
+
+// Event registration
+const handleEventRegistration = async (eventId) => {
+    const success = await api.registerForEvent(eventId);
+    if (success) {
+        alert('Successfully registered for event!');
+        // Refresh events list
+        loadEvents();
+    }
+};
+*/
+EOF
+
+echo "Frontend integration examples created in frontend-integration.js"
+echo ""
+echo "==================== QUICK START ===================="
+echo ""
+echo "1. Copy the database schema to schema.sql"
+echo "2. Copy the API routes to server.js"
+echo "3. Run: npm install"
+echo "4. Set up your environment variables in .env"
+echo "5. Run: npm run db:migrate"
+echo "6. Run: npm run dev"
+echo "7. Test the API endpoints"
+echo "8. Deploy to Vercel: vercel --prod"
+echo ""
+echo "Default admin login:"
+echo "Email: admin@alumni.edu"
+echo "Password: admin123"
+echo ""
+echo "==================== SECURITY NOTES ===================="
+echo ""
+echo "1. Change default admin password immediately"
+echo "2. Use strong JWT_SECRET (minimum 32 characters)"
+echo "3. Enable HTTPS in production"
+echo "4. Set up proper CORS origins"
+echo "5. Consider rate limiting for production"
+echo "6. Regular security updates"
+echo ""
