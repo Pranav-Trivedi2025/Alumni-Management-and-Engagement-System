@@ -1,0 +1,743 @@
+// Alumni Management System MySQL API Routes
+// Required packages: express, bcryptjs, jsonwebtoken, mysql2, cors, helmet, express-rate-limit
+
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const mysql = require('mysql2/promise');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+
+// Database connection pool
+const pool = mysql.createPool({
+    host: process.env.DB_HOST || 'localhost',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || '',
+    database: process.env.DB_NAME || 'alumni_management',
+    waitForConnections: true,
+    connectionLimit: 10,
+    queueLimit: 0,
+    acquireTimeout: 60000,
+    timeout: 60000,
+    reconnect: true
+});
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    credentials: true
+}));
+app.use(express.json({ limit: '10mb' }));
+
+// Rate limiting
+const limiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 100 // limit each IP to 100 requests per windowMs
+});
+app.use(limiter);
+
+// Auth middleware
+const authenticateToken = (req, res, next) => {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access token required' });
+    }
+
+    jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+        if (err) {
+            return res.status(403).json({ error: 'Invalid or expired token' });
+        }
+        req.user = user;
+        next();
+    });
+};
+
+// ==================== AUTHENTICATION ROUTES ====================
+
+// Register
+app.post('/api/auth/register', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { email, password, role = 'alumni' } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Check if user exists
+        const [existingUsers] = await connection.execute(
+            'SELECT id FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (existingUsers.length > 0) {
+            return res.status(409).json({ error: 'User already exists' });
+        }
+
+        // Hash password
+        const saltRounds = 12;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
+        const userId = uuidv4();
+
+        // Create user
+        await connection.execute(
+            'INSERT INTO users (id, email, password_hash, role) VALUES (?, ?, ?, ?)',
+            [userId, email, hashedPassword, role]
+        );
+
+        const token = jwt.sign(
+            { userId, email, role },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.status(201).json({
+            message: 'User created successfully',
+            token,
+            user: { id: userId, email, role }
+        });
+    } catch (error) {
+        console.error('Registration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Login
+app.post('/api/auth/login', async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { email, password } = req.body;
+
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Find user
+        const [users] = await connection.execute(
+            'SELECT id, email, password_hash, role, is_active FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (users.length === 0) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        const user = users[0];
+
+        if (!user.is_active) {
+            return res.status(401).json({ error: 'Account is deactivated' });
+        }
+
+        // Verify password
+        const isValidPassword = await bcrypt.compare(password, user.password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid credentials' });
+        }
+
+        // Generate token
+        const token = jwt.sign(
+            { userId: user.id, email: user.email, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' }
+        );
+
+        res.json({
+            message: 'Login successful',
+            token,
+            user: { id: user.id, email: user.email, role: user.role }
+        });
+    } catch (error) {
+        console.error('Login error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== PROFILE MANAGEMENT ROUTES ====================
+
+// Get current user profile
+app.get('/api/profile', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [profiles] = await connection.execute(`
+            SELECT ap.*, u.email, u.role
+            FROM alumni_profiles ap
+            JOIN users u ON ap.user_id = u.id
+            WHERE ap.user_id = ?
+        `, [req.user.userId]);
+
+        if (profiles.length === 0) {
+            return res.status(404).json({ error: 'Profile not found' });
+        }
+
+        // Parse JSON fields
+        const profile = profiles[0];
+        profile.achievements = profile.achievements ? JSON.parse(profile.achievements) : [];
+        profile.skills = profile.skills ? JSON.parse(profile.skills) : [];
+
+        res.json(profile);
+    } catch (error) {
+        console.error('Get profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Create/Update profile
+app.post('/api/profile', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const {
+            alumni_id, first_name, last_name, batch_year, graduation_date,
+            current_job_title, current_company, industry, location_city,
+            location_state, location_country, phone, linkedin_url, bio,
+            profile_image_url, achievements, skills, is_mentor_available
+        } = req.body;
+
+        // Convert arrays to JSON strings
+        const achievementsJson = achievements ? JSON.stringify(achievements) : null;
+        const skillsJson = skills ? JSON.stringify(skills) : null;
+
+        await connection.execute(`
+            INSERT INTO alumni_profiles (
+                id, user_id, alumni_id, first_name, last_name, batch_year, graduation_date,
+                current_job_title, current_company, industry, location_city,
+                location_state, location_country, phone, linkedin_url, bio,
+                profile_image_url, achievements, skills, is_mentor_available
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                alumni_id = VALUES(alumni_id),
+                first_name = VALUES(first_name),
+                last_name = VALUES(last_name),
+                batch_year = VALUES(batch_year),
+                graduation_date = VALUES(graduation_date),
+                current_job_title = VALUES(current_job_title),
+                current_company = VALUES(current_company),
+                industry = VALUES(industry),
+                location_city = VALUES(location_city),
+                location_state = VALUES(location_state),
+                location_country = VALUES(location_country),
+                phone = VALUES(phone),
+                linkedin_url = VALUES(linkedin_url),
+                bio = VALUES(bio),
+                profile_image_url = VALUES(profile_image_url),
+                achievements = VALUES(achievements),
+                skills = VALUES(skills),
+                is_mentor_available = VALUES(is_mentor_available),
+                updated_at = CURRENT_TIMESTAMP
+        `, [
+            uuidv4(), req.user.userId, alumni_id, first_name, last_name, batch_year, graduation_date,
+            current_job_title, current_company, industry, location_city,
+            location_state, location_country, phone, linkedin_url, bio,
+            profile_image_url, achievementsJson, skillsJson, is_mentor_available
+        ]);
+
+        res.json({ message: 'Profile updated successfully' });
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== EVENT MANAGEMENT ROUTES ====================
+
+// Get all events
+app.get('/api/events', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { upcoming } = req.query;
+        let query = `
+            SELECT e.*, 
+                   COUNT(er.id) as registered_count,
+                   CASE WHEN user_reg.id IS NOT NULL THEN true ELSE false END as is_registered
+            FROM events e
+            LEFT JOIN event_registrations er ON e.id = er.event_id
+            LEFT JOIN event_registrations user_reg ON e.id = user_reg.event_id AND user_reg.user_id = ?
+            WHERE e.is_active = true
+        `;
+        
+        if (upcoming === 'true') {
+            query += ' AND e.event_date >= CURDATE()';
+        }
+        
+        query += ' GROUP BY e.id ORDER BY e.event_date ASC';
+
+        const [events] = await connection.execute(query, [req.user.userId]);
+        res.json(events);
+    } catch (error) {
+        console.error('Get events error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Register for event
+app.post('/api/events/:eventId/register', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { eventId } = req.params;
+
+        await connection.execute(
+            'INSERT IGNORE INTO event_registrations (id, event_id, user_id) VALUES (?, ?, ?)',
+            [uuidv4(), eventId, req.user.userId]
+        );
+
+        res.json({ message: 'Successfully registered for event' });
+    } catch (error) {
+        console.error('Event registration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Unregister from event
+app.delete('/api/events/:eventId/register', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { eventId } = req.params;
+
+        await connection.execute(
+            'DELETE FROM event_registrations WHERE event_id = ? AND user_id = ?',
+            [eventId, req.user.userId]
+        );
+
+        res.json({ message: 'Successfully unregistered from event' });
+    } catch (error) {
+        console.error('Event unregistration error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== MENTORSHIP ROUTES ====================
+
+// Get available mentors
+app.get('/api/mentors', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { industry, role } = req.query;
+        let query = `
+            SELECT ap.*, u.email
+            FROM alumni_profiles ap
+            JOIN users u ON ap.user_id = u.id
+            WHERE ap.is_mentor_available = true AND ap.is_profile_public = true
+        `;
+        const params = [];
+
+        if (industry) {
+            params.push(`%${industry}%`);
+            query += ` AND ap.industry LIKE ?`;
+        }
+
+        if (role) {
+            params.push(`%${role}%`);
+            query += ` AND ap.current_job_title LIKE ?`;
+        }
+
+        const [mentors] = await connection.execute(query, params);
+        
+        // Parse JSON fields for each mentor
+        const parsedMentors = mentors.map(mentor => ({
+            ...mentor,
+            achievements: mentor.achievements ? JSON.parse(mentor.achievements) : [],
+            skills: mentor.skills ? JSON.parse(mentor.skills) : []
+        }));
+
+        res.json(parsedMentors);
+    } catch (error) {
+        console.error('Get mentors error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Request mentorship
+app.post('/api/mentorship/request', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { mentor_id, industry_focus, role_focus, request_message } = req.body;
+
+        const requestId = uuidv4();
+        await connection.execute(`
+            INSERT INTO mentorship_requests (id, mentor_id, mentee_id, industry_focus, role_focus, request_message)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `, [requestId, mentor_id, req.user.userId, industry_focus, role_focus, request_message]);
+
+        res.json({ message: 'Mentorship request sent successfully', requestId });
+    } catch (error) {
+        console.error('Mentorship request error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== DONATIONS ROUTES ====================
+
+// Make donation
+app.post('/api/donations', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { amount, project_name, project_category, is_anonymous } = req.body;
+
+        const donationId = uuidv4();
+        await connection.execute(`
+            INSERT INTO donations (id, donor_id, amount, project_name, project_category, is_anonymous)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `, [donationId, req.user.userId, amount, project_name, project_category, is_anonymous]);
+
+        res.json({ message: 'Donation recorded successfully', donationId });
+    } catch (error) {
+        console.error('Donation error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Get user donations
+app.get('/api/donations', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [donations] = await connection.execute(`
+            SELECT * FROM donations WHERE donor_id = ? ORDER BY donation_date DESC
+        `, [req.user.userId]);
+
+        res.json(donations);
+    } catch (error) {
+        console.error('Get donations error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== NOTIFICATIONS ROUTES ====================
+
+// Get user notifications
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [notifications] = await connection.execute(`
+            SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT 50
+        `, [req.user.userId]);
+
+        res.json(notifications);
+    } catch (error) {
+        console.error('Get notifications error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Mark notification as read
+app.patch('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        await connection.execute(`
+            UPDATE notifications SET is_read = true WHERE id = ? AND user_id = ?
+        `, [req.params.id, req.user.userId]);
+
+        res.json({ message: 'Notification marked as read' });
+    } catch (error) {
+        console.error('Mark notification read error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== GAMIFICATION ROUTES ====================
+
+// Get user badges
+app.get('/api/badges', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [badges] = await connection.execute(`
+            SELECT b.*, ub.earned_date
+            FROM user_badges ub
+            JOIN badges b ON ub.badge_id = b.id
+            WHERE ub.user_id = ?
+            ORDER BY ub.earned_date DESC
+        `, [req.user.userId]);
+
+        res.json(badges);
+    } catch (error) {
+        console.error('Get badges error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Get leaderboard
+app.get('/api/leaderboard', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [leaderboard] = await connection.execute(`
+            SELECT 
+                ap.first_name, ap.last_name, ap.current_company,
+                COUNT(ub.id) as badge_count,
+                COALESCE(SUM(b.points_value), 0) as total_points
+            FROM alumni_profiles ap
+            LEFT JOIN user_badges ub ON ap.user_id = ub.user_id
+            LEFT JOIN badges b ON ub.badge_id = b.id
+            WHERE ap.is_profile_public = true
+            GROUP BY ap.user_id, ap.first_name, ap.last_name, ap.current_company
+            ORDER BY total_points DESC, badge_count DESC
+            LIMIT 20
+        `);
+
+        res.json(leaderboard);
+    } catch (error) {
+        console.error('Get leaderboard error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== DASHBOARD DATA ROUTE ====================
+
+// Get dashboard summary
+app.get('/api/dashboard', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        // Get profile data
+        const [profiles] = await connection.execute(`
+            SELECT ap.*, u.email FROM alumni_profiles ap 
+            JOIN users u ON ap.user_id = u.id 
+            WHERE ap.user_id = ?
+        `, [req.user.userId]);
+
+        // Get upcoming events
+        const [upcomingEvents] = await connection.execute(`
+            SELECT e.*, CASE WHEN er.id IS NOT NULL THEN true ELSE false END as is_registered
+            FROM events e
+            LEFT JOIN event_registrations er ON e.id = er.event_id AND er.user_id = ?
+            WHERE e.event_date >= CURDATE() AND e.is_active = true
+            ORDER BY e.event_date ASC LIMIT 5
+        `, [req.user.userId]);
+
+        // Get recent notifications
+        const [recentNotifications] = await connection.execute(`
+            SELECT * FROM notifications WHERE user_id = ? AND is_read = false
+            ORDER BY created_at DESC LIMIT 5
+        `, [req.user.userId]);
+
+        // Get user badges count
+        const [badgeCount] = await connection.execute(`
+            SELECT COUNT(*) as badge_count FROM user_badges WHERE user_id = ?
+        `, [req.user.userId]);
+
+        // Parse JSON fields in profile if exists
+        let profile = null;
+        if (profiles.length > 0) {
+            profile = profiles[0];
+            profile.achievements = profile.achievements ? JSON.parse(profile.achievements) : [];
+            profile.skills = profile.skills ? JSON.parse(profile.skills) : [];
+        }
+
+        res.json({
+            profile,
+            upcomingEvents,
+            notifications: recentNotifications,
+            badgeCount: badgeCount[0].badge_count
+        });
+    } catch (error) {
+        console.error('Dashboard error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== ADMIN ROUTES ====================
+
+// Create event (Admin only)
+app.post('/api/admin/events', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+
+        const {
+            event_name, description, event_date, event_time, venue,
+            organizer, organizer_contact, event_type, max_attendees,
+            registration_deadline, event_image_url
+        } = req.body;
+
+        const eventId = uuidv4();
+        await connection.execute(`
+            INSERT INTO events (
+                id, event_name, description, event_date, event_time, venue,
+                organizer, organizer_contact, event_type, max_attendees,
+                registration_deadline, event_image_url, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+            eventId, event_name, description, event_date, event_time, venue,
+            organizer, organizer_contact, event_type, max_attendees,
+            registration_deadline, event_image_url, req.user.userId
+        ]);
+
+        res.json({ message: 'Event created successfully', eventId });
+    } catch (error) {
+        console.error('Create event error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Get all users (Admin only)
+app.get('/api/admin/users', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        if (req.user.role !== 'admin') {
+            return res.status(403).json({ error: 'Admin access required' });
+        }
+
+        const [users] = await connection.execute(`
+            SELECT u.id, u.email, u.role, u.is_active, u.created_at,
+                   ap.first_name, ap.last_name, ap.batch_year, ap.current_company
+            FROM users u
+            LEFT JOIN alumni_profiles ap ON u.id = ap.user_id
+            ORDER BY u.created_at DESC
+        `);
+
+        res.json(users);
+    } catch (error) {
+        console.error('Get users error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// ==================== UTILITY FUNCTIONS ====================
+
+// Health check endpoint
+app.get('/api/health', async (req, res) => {
+    try {
+        const connection = await pool.getConnection();
+        await connection.execute('SELECT 1');
+        connection.release();
+        res.json({ status: 'OK', timestamp: new Date().toISOString() });
+    } catch (error) {
+        res.status(500).json({ status: 'ERROR', error: error.message });
+    }
+});
+
+// Get statistics
+app.get('/api/stats', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const [totalUsers] = await connection.execute('SELECT COUNT(*) as count FROM users WHERE is_active = true');
+        const [totalEvents] = await connection.execute('SELECT COUNT(*) as count FROM events WHERE is_active = true');
+        const [totalDonations] = await connection.execute('SELECT COALESCE(SUM(amount), 0) as total FROM donations WHERE payment_status = "completed"');
+        const [totalMentorships] = await connection.execute('SELECT COUNT(*) as count FROM mentorship_requests WHERE status = "accepted"');
+
+        res.json({
+            totalUsers: totalUsers[0].count,
+            totalEvents: totalEvents[0].count,
+            totalDonations: totalDonations[0].total,
+            totalMentorships: totalMentorships[0].count
+        });
+    } catch (error) {
+        console.error('Get stats error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Search alumni
+app.get('/api/search', authenticateToken, async (req, res) => {
+    const connection = await pool.getConnection();
+    try {
+        const { query, batch_year, company, industry } = req.query;
+        
+        let searchQuery = `
+            SELECT ap.id, ap.first_name, ap.last_name, ap.batch_year, 
+                   ap.current_job_title, ap.current_company, ap.industry,
+                   ap.location_city, ap.location_country, ap.profile_image_url
+            FROM alumni_profiles ap
+            WHERE ap.is_profile_public = true
+        `;
+        const params = [];
+
+        if (query) {
+            searchQuery += ` AND (ap.first_name LIKE ? OR ap.last_name LIKE ? OR ap.current_company LIKE ?)`;
+            params.push(`%${query}%`, `%${query}%`, `%${query}%`);
+        }
+
+        if (batch_year) {
+            searchQuery += ` AND ap.batch_year = ?`;
+            params.push(batch_year);
+        }
+
+        if (company) {
+            searchQuery += ` AND ap.current_company LIKE ?`;
+            params.push(`%${company}%`);
+        }
+
+        if (industry) {
+            searchQuery += ` AND ap.industry LIKE ?`;
+            params.push(`%${industry}%`);
+        }
+
+        searchQuery += ` ORDER BY ap.first_name, ap.last_name LIMIT 50`;
+
+        const [results] = await connection.execute(searchQuery, params);
+        res.json(results);
+    } catch (error) {
+        console.error('Search error:', error);
+        res.status(500).json({ error: 'Internal server error' });
+    } finally {
+        connection.release();
+    }
+});
+
+// Error handling middleware
+app.use((error, req, res, next) => {
+    console.error('Unhandled error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+});
+
+// 404 handler
+app.use('*', (req, res) => {
+    res.status(404).json({ error: 'Endpoint not found' });
+});
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+    console.log('Shutting down gracefully...');
+    await pool.end();
+    process.exit(0);
+});
+
+// Start server
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+    console.log(`🚀 Alumni Management API Server running on port ${PORT}`);
+    console.log(`📊 Health check: http://localhost:${PORT}/api/health`);
+});
